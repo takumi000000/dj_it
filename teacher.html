@@ -1,0 +1,76 @@
+<!DOCTYPE html><html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>DJアイティ – Teacher</title>
+<script src="https://www.youtube.com/iframe_api"></script>
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.0/dist/tailwind.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<script type="module">
+import {getServerUrl,setServerUrl} from './config.js';
+
+let server = getServerUrl();
+if(!server){
+  server = prompt("API サーバー(教師PC)の URLを入力: 例 http://192.168.1.5:8787");
+  setServerUrl(server);
+}
+
+//////////////////// YouTube Player ////////////////////
+let queue=[], player;
+window.onYouTubeIframeAPIReady = () => {
+  player = new YT.Player('player',{height:'360',width:'640',videoId:'' ,
+    events:{ onStateChange:e=>{
+      if(e.data===YT.PlayerState.ENDED) playNext();
+    }}
+  });
+  poll();       // 初回
+  setInterval(poll,3000);
+};
+
+async function poll(){
+  const res = await fetch(`${server}/queue`).then(r=>r.json()).catch(()=>[]);
+  if(res.length!==queue.length){
+    queue=res;
+    updateList();
+    if(player && player.getPlayerState()!==1) playNext();
+  }
+}
+
+function updateList(){
+  document.getElementById("qbody").innerHTML =
+    queue.map((q,i)=>`<tr class="odd:bg-gray-100">
+      <td class="px-2">${i===0?"▶":i}</td>
+      <td class="px-2 truncate">${q.title}</td>
+      <td class="px-2 text-xs text-gray-500">${q.who||""}</td></tr>`).join("");
+}
+
+async function playNext(){
+  if(!queue.length) return;
+  player.loadVideoById(queue[0].videoId);
+}
+
+////////////// Buttons //////////////
+async function skip(){
+  await fetch(`${server}/next`,{method:'POST'});
+}
+async function clearAll(){
+  if(confirm("キューを全削除しますか？"))
+    await fetch(`${server}/clear`,{method:'POST'});
+}
+window.skip=skip;window.clearAll=clearAll;
+</script>
+</head>
+<body class="bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-600 min-h-screen text-white flex flex-col items-center">
+<h1 class="text-3xl font-bold mt-4 tracking-wide">DJアイティ – Teacher</h1>
+
+<div id="player" class="mt-4 w-full max-w-3xl rounded-xl shadow-lg"></div>
+
+<div class="flex gap-4 my-4">
+  <button onclick="skip()"  class="px-4 py-2 bg-yellow-400 text-black rounded shadow"><span class="material-icons align-middle">skip_next</span> SKIP</button>
+  <button onclick="clearAll()" class="px-4 py-2 bg-red-600  rounded shadow">CLEAR</button>
+</div>
+
+<table class="w-full max-w-3xl text-black bg-white rounded shadow">
+  <thead><tr class="bg-gray-200"><th class="w-12">#</th><th>Title</th><th class="w-28">From</th></tr></thead>
+  <tbody id="qbody"></tbody>
+</table>
+</body></html>

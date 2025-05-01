@@ -1,0 +1,38 @@
+<!DOCTYPE html><html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>DJアイティ – Request</title>
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.0/dist/tailwind.min.css" rel="stylesheet">
+<script type="module">
+import {getServerUrl} from './config.js';
+const server = getServerUrl() || prompt("API サーバー URL?");
+if(!server) location.reload();
+
+async function sendReq(){
+  const url = document.getElementById("url").value.trim();
+  const id  = (url.match(/[?&]v=([^&]+)/)||[])[1] || (url.match(/youtu\.be\/([^?]+)/)||[])[1];
+  if(!id){alert("YouTube URL が不正です");return;}
+  const info = await fetch(`https://www.youtube.com/oembed?url=https://youtu.be/${id}&format=json`)
+                     .then(r=>r.json()).catch(()=>null);
+  if(!info){alert("動画が見つかりません");return;}
+  await fetch(`${server}/add`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({videoId:id,title:info.title})
+  });
+  document.getElementById("url").value="";
+  document.getElementById("msg").textContent="🎉 リクエスト送信しました！";
+  setTimeout(()=>document.getElementById("msg").textContent="",3000);
+}
+window.sendReq=sendReq;
+</script>
+</head>
+<body class="bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 min-h-screen text-white flex flex-col items-center justify-center">
+<h1 class="text-3xl font-bold tracking-widest drop-shadow-lg mb-6">DJアイティ – リクエスト</h1>
+
+<div class="flex gap-2">
+  <input id="url" type="url" placeholder="YouTube URL" class="px-4 py-2 w-80 rounded text-black">
+  <button onclick="sendReq()" class="px-4 py-2 bg-green-500 rounded shadow">送信</button>
+</div>
+<p id="msg" class="mt-4 font-semibold"></p>
+</body></html>
