@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DJ IT – Deck</title>
+<link rel="stylesheet" href="deck.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">🎧 DJ IT <span>YouTube DJ Mode</span></div>
+  <div class="status" id="status">停止中</div>
+</header>
+
+<main>
+  <section class="decks">
+    <div class="deck" id="deckWrapA">
+      <div class="deck-label">DECK A</div>
+      <div class="frame" id="frameA"></div>
+    </div>
+    <div class="deck" id="deckWrapB">
+      <div class="deck-label">DECK B</div>
+      <div class="frame" id="frameB"></div>
+    </div>
+  </section>
+
+  <section class="nowplaying">
+    <div class="np-title" id="npTitle">— 種になる曲を読み込んでください —</div>
+    <div class="np-sub" id="npSub"></div>
+    <div class="progress"><div class="bar" id="progBar"></div></div>
+    <div class="np-times"><span id="npCur">0:00</span><span id="npDur">0:00</span></div>
+  </section>
+
+  <section class="controls">
+    <button id="btnPlay" class="btn primary">▶ 再生</button>
+    <button id="btnSkip" class="btn">⏭ 次へ (クロスフェード)</button>
+    <button id="btnReseed" class="btn">🔀 選曲を作り直す</button>
+
+    <label class="slider">
+      クロスフェード <output id="xfVal">8</output>秒
+      <input type="range" id="xfade" min="2" max="16" step="1" value="8">
+    </label>
+    <label class="slider">
+      音量 <output id="volVal">100</output>
+      <input type="range" id="master" min="0" max="100" step="1" value="100">
+    </label>
+    <label class="check">
+      <input type="checkbox" id="autoMix" checked> 自動ミックス
+    </label>
+  </section>
+
+  <section class="queue">
+    <div class="q-head">
+      <h2>次に流れる曲（YouTube Mix＝似た曲調）</h2>
+      <form id="addForm" class="add">
+        <input type="url" id="addUrl" placeholder="YouTube URL を貼って割り込み追加">
+        <button class="btn small">追加</button>
+      </form>
+    </div>
+    <ol id="qlist" class="qlist"></ol>
+  </section>
+
+  <details class="log">
+    <summary>ログ / 使い方</summary>
+    <div class="log-body">
+      <p><b>使い方:</b> YouTubeの動画ページでツールバーの「🎧 DJ IT で開始」ボタン、または拡張アイコンから起動。種の曲を元にYouTube Mix（似た曲調のラジオ）を生成し、2つのデッキでクロスフェードしながら自動で繋ぎます。</p>
+      <p><b>制約:</b> YouTube埋め込みプレイヤーは生音声にアクセスできないため、BPM/キー解析による真のビートマッチはできません。「似た曲調の自動選曲(YouTube Mix)」＋「ボリューム・クロスフェード」で近い体験を実現しています。</p>
+      <pre id="logText"></pre>
+    </div>
+  </details>
+</main>
+
+<script src="deck.js"></script>
+</body>
+</html>
