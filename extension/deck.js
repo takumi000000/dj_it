@@ -121,7 +121,9 @@ const engine = {
   manualQueue: [],         // [{videoId,title}]
   currentId: null,
   seedId: null,
-  master: 100,
+  master: 100,             // 0..100 master volume
+  chA: 1, chB: 1,          // 0..1 per-deck channel gain (faders)
+  xfPos: 0,                // 0 = full deck A, 1 = full deck B
   xfade: 8,
   autoMix: true,
   running: false,
@@ -138,8 +140,38 @@ function setStatus(txt, live) {
   s.classList.toggle("live", !!live);
 }
 function markActiveDeck() {
-  document.getElementById("deckWrapA").classList.toggle("active", engine.active === engine.deckA);
-  document.getElementById("deckWrapB").classList.toggle("active", engine.active === engine.deckB);
+  const a = document.getElementById("deckWrapA"), b = document.getElementById("deckWrapB");
+  if (a) a.classList.toggle("active", engine.active === engine.deckA);
+  if (b) b.classList.toggle("active", engine.active === engine.deckB);
+  updateMixerUI();
+}
+
+function setVU(id, vol, playing) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let level = Math.max(0, Math.min(100, vol));
+  if (playing && level > 0) level = Math.min(100, level * (0.78 + Math.random() * 0.34));
+  el.style.height = level + "%";
+}
+
+/* Reflect the mixer state onto the booth controls (faders, crossfader, meters). */
+function updateMixerUI() {
+  const p = engine.xfPos;
+  const volA = engine.master * engine.chA * (1 - p);
+  const volB = engine.master * engine.chB * p;
+  const playingA = engine.running && (engine.active === engine.deckA || engine.crossfading);
+  const playingB = engine.running && (engine.active === engine.deckB || engine.crossfading);
+  setVU("vuA", volA, playingA);
+  setVU("vuB", volB, playingB);
+
+  const chanA = document.getElementById("chanA"), chanB = document.getElementById("chanB");
+  if (chanA) chanA.classList.toggle("live", playingA && volA > 1);
+  if (chanB) chanB.classList.toggle("live", playingB && volB > 1);
+
+  const xf = document.getElementById("crossfader");
+  if (xf && document.activeElement !== xf) xf.value = String(Math.round(p * 100));
+  const mOut = document.getElementById("masterVal");
+  if (mOut) mOut.textContent = String(Math.round(engine.master));
 }
 
 async function fetchTitle(id) {
@@ -202,6 +234,18 @@ function consumeNext() {
   return null;
 }
 
+/* ---------------- mixer ---------------- */
+function sideXf(deck) { return deck === engine.deckB ? 1 : 0; }
+
+/* Single source of truth for both decks' volume:
+ * vol = master * channelGain * (crossfader position for that side). */
+function applyMix() {
+  const p = engine.xfPos;
+  if (engine.deckA) engine.deckA.setVolume(engine.master * engine.chA * (1 - p));
+  if (engine.deckB) engine.deckB.setVolume(engine.master * engine.chB * p);
+  updateMixerUI();
+}
+
 /* ---------------- crossfade ---------------- */
 function crossfadeTo(nextId, seconds) {
   if (engine.crossfading || !nextId) return;
@@ -211,23 +255,24 @@ function crossfadeTo(nextId, seconds) {
   log("クロスフェード → " + nextId + " (" + seconds + "s)");
 
   to.loadVideoById(nextId, true);
-  to.setVolume(0);
   to.unmute();
 
+  const startPos = engine.xfPos;
+  const endPos = sideXf(to);
   const steps = Math.max(1, Math.round(seconds * 10));
   let i = 0;
   const timer = setInterval(() => {
     i++;
     const t = i / steps;           // 0..1
-    from.setVolume(engine.master * (1 - t));
-    to.setVolume(engine.master * t);
+    engine.xfPos = startPos + (endPos - startPos) * t;
+    applyMix();
     if (i >= steps) {
       clearInterval(timer);
+      engine.xfPos = endPos;
       from.pause();
-      from.setVolume(0);
-      to.setVolume(engine.master);
       engine.active = to;
       engine.currentId = nextId;
+      applyMix();
       // consume the item we just played
       consumeNext();
       markActiveDeck();
@@ -285,16 +330,28 @@ function onDeckError(frame, code) {
 }
 
 /* ---------------- UI refresh ---------------- */
+function deckLcd(deck, titleId, subId) {
+  const vd = deck && deck.info && deck.info.videoData ? deck.info.videoData : {};
+  const tEl = document.getElementById(titleId), sEl = document.getElementById(subId);
+  if (tEl) tEl.textContent = vd.title || "—";
+  if (sEl) sEl.textContent = vd.author || "";
+}
 function refreshNowPlaying() {
   const info = engine.active ? engine.active.info : null;
   const vd = info && info.videoData ? info.videoData : {};
-  document.getElementById("npTitle").textContent =
+  const npTitle = document.getElementById("npTitle");
+  if (npTitle) npTitle.textContent =
     vd.title || (engine.currentId ? "読み込み中…" : "— 種になる曲を読み込んでください —");
-  document.getElementById("npSub").textContent = vd.author || "";
+  const npSub = document.getElementById("npSub");
+  if (npSub) npSub.textContent = vd.author || "";
   const dur = info ? info.duration || 0 : 0, cur = info ? info.currentTime || 0 : 0;
-  document.getElementById("progBar").style.width = dur ? (cur / dur * 100) + "%" : "0%";
-  document.getElementById("npCur").textContent = fmtTime(cur);
-  document.getElementById("npDur").textContent = fmtTime(dur);
+  const bar = document.getElementById("progBar");
+  if (bar) bar.style.width = dur ? (cur / dur * 100) + "%" : "0%";
+  const c = document.getElementById("npCur"), d = document.getElementById("npDur");
+  if (c) c.textContent = fmtTime(cur);
+  if (d) d.textContent = fmtTime(dur);
+  deckLcd(engine.deckA, "lcdA", "lcdASub");
+  deckLcd(engine.deckB, "lcdB", "lcdBSub");
 }
 
 async function renderQueue() {
@@ -376,25 +433,52 @@ function start() {
   if (!engine.currentId) { log("先に種の曲を読み込んでください"); return; }
   ensureDecks();
   engine.running = true;
-  engine.active.unmute();
-  engine.active.setVolume(engine.master);
+  engine.xfPos = sideXf(engine.active);
+  engine.deckA && engine.deckA.unmute();
+  engine.deckB && engine.deckB.unmute();
+  applyMix();
   engine.active.play();
   setStatus("▶ 再生中 (自動DJ)", true);
-  document.getElementById("btnPlay").textContent = "⏸ 一時停止";
+  setPlayButton(true);
 }
 function pause() {
   engine.running = false;
   engine.active && engine.active.pause();
   setStatus("一時停止");
-  document.getElementById("btnPlay").textContent = "▶ 再生";
+  setPlayButton(false);
+}
+function setPlayButton(playing) {
+  const b = document.getElementById("btnPlay");
+  if (b) { b.textContent = playing ? "⏸" : "▶"; b.classList.toggle("on", playing); }
+}
+
+/* ---------------- pop-out booth window / focus mode ---------------- */
+function popOut() {
+  try {
+    if (chrome && chrome.tabs && chrome.tabs.getCurrent) {
+      chrome.tabs.getCurrent((tab) => {
+        if (!tab) { log("ブース窓化に失敗しました"); return; }
+        chrome.windows.create({ tabId: tab.id, type: "popup", width: 560, height: 760 });
+      });
+    } else { log("この環境ではブース窓化できません"); }
+  } catch (_) { log("ブース窓化に失敗しました"); }
+}
+function setCompact(on) {
+  document.body.classList.toggle("compact", on);
+  try { localStorage.setItem("djit_compact", on ? "1" : "0"); } catch (_) {}
+  const b = document.getElementById("btnCompact");
+  if (b) { b.classList.toggle("on", on); b.title = on ? "モニターを表示" : "モニターを隠して集中モード"; }
 }
 
 /* ---------------- wire up UI ---------------- */
+function bindFader(id, onVal) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener("input", () => onVal(+el.value));
+}
 function bindUI() {
-  const play = document.getElementById("btnPlay");
-  play.addEventListener("click", () => {
-    if (engine.running) pause();
-    else start();
+  document.getElementById("btnPlay").addEventListener("click", () => {
+    if (engine.running) pause(); else start();
   });
   document.getElementById("btnSkip").addEventListener("click", () => {
     if (!engine.running) start();
@@ -404,17 +488,28 @@ function bindUI() {
     engine.radioList = engine.radioList.slice(0, engine.radioIdx); // drop stale upcoming
     reseed(engine.currentId || engine.seedId);
   });
+
+  // vertical faders + master
+  bindFader("master", (v) => { engine.master = v; applyMix(); });
+  bindFader("faderA", (v) => { engine.chA = v / 100; applyMix(); });
+  bindFader("faderB", (v) => { engine.chB = v / 100; applyMix(); });
+  // crossfader (manual A<->B blend)
+  bindFader("crossfader", (v) => { engine.xfPos = v / 100; applyMix(); });
+
   const xf = document.getElementById("xfade"), xfVal = document.getElementById("xfVal");
   xf.addEventListener("input", () => { engine.xfade = +xf.value; xfVal.textContent = xf.value; });
-  const mv = document.getElementById("master"), volVal = document.getElementById("volVal");
-  mv.addEventListener("input", () => {
-    engine.master = +mv.value; volVal.textContent = mv.value;
-    if (!engine.crossfading && engine.active) engine.active.setVolume(engine.master);
-  });
+
   document.getElementById("autoMix").addEventListener("change", (e) => {
     engine.autoMix = e.target.checked;
     log("自動ミックス: " + (engine.autoMix ? "ON" : "OFF"));
   });
+
+  const compactBtn = document.getElementById("btnCompact");
+  if (compactBtn) compactBtn.addEventListener("click", () =>
+    setCompact(!document.body.classList.contains("compact")));
+  const popBtn = document.getElementById("btnPop");
+  if (popBtn) popBtn.addEventListener("click", popOut);
+
   document.getElementById("addForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const inp = document.getElementById("addUrl");
@@ -437,7 +532,15 @@ function boot() {
   document.body.appendChild(rm);
 
   bindUI();
-  const seed = parseVideoId(new URLSearchParams(location.search).get("v"));
+  updateMixerUI();
+
+  const params = new URLSearchParams(location.search);
+  let compact = false;
+  try { compact = localStorage.getItem("djit_compact") === "1"; } catch (_) {}
+  if (params.get("compact") === "1") compact = true;
+  setCompact(compact);
+
+  const seed = parseVideoId(params.get("v"));
   if (seed) prepare(seed);
   else setStatus("URLを貼るか、YouTubeから「DJ IT で開始」してください");
 }
