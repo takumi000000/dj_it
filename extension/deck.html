@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DJ IT – Booth</title>
+<link rel="stylesheet" href="deck.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">🎧 DJ IT <span>BOOTH</span></div>
+  <div class="status" id="status">停止中</div>
+  <div class="top-btns">
+    <button id="btnCompact" class="chip" title="モニターを隠して集中モード">🎛 集中</button>
+    <button id="btnPop" class="chip" title="小さなブース窓として切り離す">🪟 ブース窓</button>
+  </div>
+</header>
+
+<main>
+  <!-- ===== Mixer console ===== -->
+  <section class="console">
+    <!-- Channel A -->
+    <div class="channel" id="chanA">
+      <div class="deck-tag">DECK A</div>
+      <div class="lcd">
+        <div class="lcd-title" id="lcdA">—</div>
+        <div class="lcd-sub" id="lcdASub"></div>
+      </div>
+      <div class="strip">
+        <div class="meter"><div class="vu" id="vuA"></div></div>
+        <input class="fader" id="faderA" type="range" min="0" max="100" value="100"
+               orient="vertical" aria-label="デッキA 音量">
+      </div>
+      <div class="cap">CH A</div>
+    </div>
+
+    <!-- Center: master + transport + crossfader -->
+    <div class="center">
+      <div class="lcd main">
+        <div class="np-title" id="npTitle">— 種になる曲を読み込んでください —</div>
+        <div class="np-sub" id="npSub"></div>
+        <div class="progress"><div class="bar" id="progBar"></div></div>
+        <div class="np-times"><span id="npCur">0:00</span><span id="npDur">0:00</span></div>
+      </div>
+
+      <div class="transport">
+        <button id="btnPlay" class="jog" title="再生 / 一時停止">▶</button>
+        <button id="btnSkip" class="tbtn" title="次へ (クロスフェード)">⏭</button>
+        <button id="btnReseed" class="tbtn" title="似た曲調で選曲し直す">🔀</button>
+      </div>
+
+      <div class="center-faders">
+        <div class="mstack">
+          <input class="fader" id="master" type="range" min="0" max="100" value="100"
+                 orient="vertical" aria-label="マスター音量">
+          <div class="cap">MASTER <output id="masterVal">100</output></div>
+        </div>
+        <div class="knobs">
+          <label class="knob">
+            <span>XFADE <output id="xfVal">8</output>s</span>
+            <input type="range" id="xfade" min="2" max="16" step="1" value="8">
+          </label>
+          <label class="check"><input type="checkbox" id="autoMix" checked> AUTO MIX</label>
+        </div>
+      </div>
+
+      <div class="xfader-row">
+        <span class="ab">A</span>
+        <input class="crossfader" id="crossfader" type="range" min="0" max="100" value="0"
+               aria-label="クロスフェーダー">
+        <span class="ab">B</span>
+      </div>
+    </div>
+
+    <!-- Channel B -->
+    <div class="channel" id="chanB">
+      <div class="deck-tag">DECK B</div>
+      <div class="lcd">
+        <div class="lcd-title" id="lcdB">—</div>
+        <div class="lcd-sub" id="lcdBSub"></div>
+      </div>
+      <div class="strip">
+        <div class="meter"><div class="vu" id="vuB"></div></div>
+        <input class="fader" id="faderB" type="range" min="0" max="100" value="100"
+               orient="vertical" aria-label="デッキB 音量">
+      </div>
+      <div class="cap">CH B</div>
+    </div>
+  </section>
+
+  <!-- ===== Video monitors (hidden in focus mode) ===== -->
+  <section class="monitors">
+    <div class="deck" id="deckWrapA"><span class="deck-label">A</span><div class="frame" id="frameA"></div></div>
+    <div class="deck" id="deckWrapB"><span class="deck-label">B</span><div class="frame" id="frameB"></div></div>
+  </section>
+
+  <!-- ===== Queue ===== -->
+  <section class="queue">
+    <div class="q-head">
+      <h2>NEXT UP（YouTube Mix＝似た曲調）</h2>
+      <form id="addForm" class="add">
+        <input type="url" id="addUrl" placeholder="YouTube URL を貼って割り込み">
+        <button class="btn small">追加</button>
+      </form>
+    </div>
+    <ol id="qlist" class="qlist"></ol>
+  </section>
+
+  <details class="log">
+    <summary>ログ / 使い方</summary>
+    <div class="log-body">
+      <p><b>使い方:</b> 「▶」で再生開始。曲終わりで自動的に似た曲調へクロスフェードします。各デッキの縦フェーダー（CH A / CH B）とMASTERで音量、下のクロスフェーダーでA↔Bのブレンドを手動調整できます。</p>
+      <p><b>集中モード:</b> 右上「🎛 集中」で映像を隠しミキサーだけに。「🪟 ブース窓」で小さな別ウィンドウに切り離せる（再生は途切れません）ので、作業画面の脇に置けます。</p>
+      <p><b>制約:</b> YouTube埋め込みは生音声にアクセスできないため、BPM/キー解析による真のビートマッチはできません。「似た曲調の自動選曲(YouTube Mix)」＋「ボリューム・クロスフェード」で近い体験を実現しています。メーターは再生状況を示す装飾表示です。</p>
+      <pre id="logText"></pre>
+    </div>
+  </details>
+</main>
+
+<script src="deck.js"></script>
+</body>
+</html>

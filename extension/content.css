@@ -1,0 +1,26 @@
+#djit-start-btn {
+  cursor: pointer;
+  font-family: system-ui, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  font-weight: 700;
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7c3aee, #ec4899);
+  box-shadow: 0 2px 10px rgba(124, 58, 238, .4);
+}
+#djit-start-btn.djit-inline {
+  margin-right: 8px;
+  padding: 0 16px;
+  height: 36px;
+  font-size: 14px;
+  align-self: center;
+}
+#djit-start-btn.djit-float {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 9999;
+  padding: 12px 18px;
+  font-size: 15px;
+}
+#djit-start-btn:hover { filter: brightness(1.1); }

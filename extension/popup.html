@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<style>
+  body { width: 280px; margin: 0; font-family: system-ui, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+         background: #17142b; color: #f4f2ff; padding: 16px; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  p { font-size: 12px; color: #a49fc4; margin: 0 0 14px; line-height: 1.5; }
+  button { width: 100%; border: 0; border-radius: 10px; padding: 11px; font-size: 14px;
+           font-weight: 700; color: #fff; cursor: pointer; margin-bottom: 8px; }
+  .primary { background: linear-gradient(90deg, #7c3aee, #ec4899); }
+  .ghost { background: #201b3a; }
+  .hint { font-size: 11px; color: #7f7aa8; margin-top: 6px; }
+  input { width: 100%; box-sizing: border-box; padding: 9px; border-radius: 8px; border: 1px solid #322a58;
+          background: #201b3a; color: #fff; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+  <h1>🎧 DJ IT</h1>
+  <p>YouTubeで似た曲調の曲を自動選曲＆クロスフェードで繋ぐDJモード。</p>
+  <button id="fromCurrent" class="primary">再生中の動画でDJ開始</button>
+  <input id="url" type="url" placeholder="または YouTube URL を貼る">
+  <button id="fromUrl" class="ghost">このURLでDJ開始</button>
+  <button id="empty" class="ghost">空のデッキを開く</button>
+  <div class="hint">YouTubeの動画ページ上のボタンからも起動できます。</div>
+  <script src="popup.js"></script>
+</body>
+</html>
