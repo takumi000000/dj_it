@@ -127,6 +127,8 @@ const engine = {
   xfade: 8,
   autoMix: true,
   running: false,
+  autoStartPending: false,  // auto-start the DJ as soon as deck A is ready
+  muted: false,             // true while auto-started muted, awaiting a gesture to enable sound
   crossfading: false,
   nativeRadio: false,       // fallback: let YouTube's own radio auto-advance one deck
   titleCache: new Map(),
@@ -305,6 +307,11 @@ function goNextNow(seconds) {
 
 /* ---------------- info handling per active deck ---------------- */
 function onDeckInfo(frame, info) {
+  // Kick off the auto-DJ the moment deck A is live (muted; a click enables sound).
+  if (engine.autoStartPending && frame === engine.deckA && !engine.running) {
+    engine.autoStartPending = false;
+    startMuted();
+  }
   if (frame !== engine.active || engine.crossfading || !engine.running) { refreshNowPlaying(); return; }
   const dur = info.duration || 0, cur = info.currentTime || 0;
   refreshNowPlaying();
@@ -414,25 +421,54 @@ async function prepare(seedId) {
     engine.currentId = seedId;
     engine.deckA.load(seedId, { autoplay: false, list: "RD" + seedId });
     engine.deckA.mute();
-    setStatus("▶ を押すと開始 (YouTubeラジオ)");
     log("Mixリストを取得できず → YouTubeネイティブラジオで自動再生します");
   } else {
     engine.nativeRadio = false;
-    // first track = seed (radioList[0]); cue it on deck A, muted, ready for a gesture
+    // first track = seed (radioList[0])
     engine.currentId = engine.radioList[engine.radioIdx++];
     engine.deckA.load(engine.currentId, { autoplay: false });
     engine.deckA.mute();
-    setStatus("▶ を押すと開始");
     log("準備完了: " + engine.radioList.length + " 曲の似た曲調プレイリスト");
   }
   renderQueue();
   refreshNowPlaying();
+  // The DJ runs on its own: begin as soon as deck A is ready (muted); one click
+  // enables sound. onDeckInfo triggers this; keep a fallback in case info is slow.
+  engine.autoStartPending = true;
+  setTimeout(() => { if (engine.autoStartPending) { engine.autoStartPending = false; startMuted(); } }, 3000);
 }
 
+/* Auto-start immediately, muted (allowed without a gesture). The DJ selects and
+ * mixes on its own; a single click anywhere enables sound after that. */
+function startMuted() {
+  if (!engine.currentId) return;
+  ensureDecks();
+  engine.running = true;
+  engine.muted = true;
+  engine.xfPos = sideXf(engine.active);
+  engine.deckA && engine.deckA.mute();
+  engine.deckB && engine.deckB.mute();
+  applyMix();
+  engine.active.play();
+  setStatus("🔇 自動再生中 – クリックで音を出す", true);
+  setPlayButton(true);
+  showUnmute(true);
+}
+function unmuteAll() {
+  if (!engine.running) { start(); return; }
+  engine.muted = false;
+  engine.deckA && engine.deckA.unmute();
+  engine.deckB && engine.deckB.unmute();
+  applyMix();
+  showUnmute(false);
+  setStatus("▶ 再生中 (自動DJ)", true);
+  log("サウンド ON");
+}
 function start() {
   if (!engine.currentId) { log("先に種の曲を読み込んでください"); return; }
   ensureDecks();
   engine.running = true;
+  engine.muted = false;
   engine.xfPos = sideXf(engine.active);
   engine.deckA && engine.deckA.unmute();
   engine.deckB && engine.deckB.unmute();
@@ -440,12 +476,17 @@ function start() {
   engine.active.play();
   setStatus("▶ 再生中 (自動DJ)", true);
   setPlayButton(true);
+  showUnmute(false);
 }
 function pause() {
   engine.running = false;
   engine.active && engine.active.pause();
   setStatus("一時停止");
   setPlayButton(false);
+}
+function showUnmute(on) {
+  const bar = document.getElementById("unmuteBar");
+  if (bar) bar.classList.toggle("show", !!on);
 }
 function setPlayButton(playing) {
   const b = document.getElementById("btnPlay");
@@ -478,8 +519,20 @@ function bindFader(id, onVal) {
 }
 function bindUI() {
   document.getElementById("btnPlay").addEventListener("click", () => {
-    if (engine.running) pause(); else start();
+    if (!engine.running) start();
+    else if (engine.muted) unmuteAll();  // auto-started muted → enable sound
+    else pause();
   });
+
+  const unmuteBtn = document.getElementById("btnUnmute");
+  if (unmuteBtn) unmuteBtn.addEventListener("click", unmuteAll);
+
+  // Any interaction anywhere enables sound once (browser autoplay policy).
+  const onFirstGesture = () => {
+    if (engine.running && engine.muted) unmuteAll();
+  };
+  window.addEventListener("pointerdown", onFirstGesture);
+  window.addEventListener("keydown", onFirstGesture);
   document.getElementById("btnSkip").addEventListener("click", () => {
     if (!engine.running) start();
     goNextNow(engine.xfade);
@@ -515,9 +568,15 @@ function bindUI() {
     const inp = document.getElementById("addUrl");
     const id = parseVideoId(inp.value);
     if (!id) { alert("YouTube URL が不正です"); return; }
+    inp.value = "";
+    if (!engine.currentId && !engine.seedId) {
+      // nothing loaded yet: use this as the seed and auto-start the DJ
+      log("種として読み込み: " + id);
+      prepare(id);
+      return;
+    }
     engine.manualQueue.push({ videoId: id });
     fetchTitle(id).then(renderQueueTitlesOnly);
-    inp.value = "";
     log("リクエスト追加: " + id);
     renderQueue();
   });
