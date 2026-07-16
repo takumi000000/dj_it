@@ -69,7 +69,6 @@ body { max-width: 1080px; margin: 0 auto; padding: 0 16px 60px; }
 
 /* vertical faders */
 .fader {
-  -webkit-appearance: slider-vertical; appearance: slider-vertical;
   writing-mode: vertical-lr; direction: rtl;
   width: 30px; height: 100%; accent-color: var(--accent); cursor: pointer; background: transparent;
 }
