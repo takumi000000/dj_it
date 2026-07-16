@@ -130,6 +130,7 @@ const engine = {
   autoStartPending: false,  // auto-start the DJ as soon as deck A is ready
   muted: false,             // true while auto-started muted, awaiting a gesture to enable sound
   crossfading: false,
+  errStreak: 0,             // consecutive playback errors (embed-disabled videos)
   nativeRadio: false,       // fallback: let YouTube's own radio auto-advance one deck
   titleCache: new Map(),
   reseedInFlight: false,
@@ -186,18 +187,56 @@ async function fetchTitle(id) {
   return id;
 }
 
-/* Build the "similar tracks" list from a YouTube Mix (RD radio). */
-function loadRadio(seedId) {
+/* Extract similar-track video IDs from a fetched YouTube watch/mix page.
+ * YouTube Mixes (RD…) generally do NOT expose their list via the IFrame API,
+ * so we read it from the page's embedded JSON instead. */
+function extractMixIds(html, seedId) {
+  const out = [], seen = new Set();
+  const push = (id) => { if (/^[\w-]{11}$/.test(id) && !seen.has(id)) { seen.add(id); out.push(id); } };
+  let m, re;
+  // 1) the Mix / playlist panel (ordered "up next" of the radio)
+  re = /"playlistPanelVideoRenderer":\{"videoId":"([\w-]{11})"/g;
+  while ((m = re.exec(html))) push(m[1]);
+  if (out.length > 1) return out;
+  // 2) fallback: related / up-next videos (similar-ish)
+  re = /"compactVideoRenderer":\{"videoId":"([\w-]{11})"/g;
+  while ((m = re.exec(html))) push(m[1]);
+  return out;
+}
+
+/* Primary "similar tracks" source: scrape the Mix page (readable + ordered,
+ * which enables real crossfades, the queue view and reliable skipping). */
+async function fetchMixList(seedId) {
+  const urls = [
+    "https://www.youtube.com/watch?v=" + seedId + "&list=RD" + seedId + "&hl=en&gl=US",
+    "https://www.youtube.com/watch?v=" + seedId + "&hl=en&gl=US",
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { credentials: "omit" });
+      if (!res.ok) continue;
+      const html = await res.text();
+      const ids = extractMixIds(html, seedId);
+      if (ids.length > 1) {
+        if (ids[0] !== seedId) ids.unshift(seedId); // attempt the requested song first
+        return ids;
+      }
+    } catch (_) {}
+  }
+  return [];
+}
+
+/* Secondary source: postMessage radio player (rarely populated for mixes). */
+function loadRadioViaPlayer(seedId) {
   return new Promise((resolve) => {
     let done = false;
-    // Updated every call so the (retained) onInfo handler resolves the CURRENT promise.
     engine._radioResolve = (list) => {
       if (done) return; done = true;
       resolve(Array.isArray(list) && list.length ? list.slice() : [seedId]);
     };
     if (!engine.radio) {
       engine.radio = new YTFrame(document.getElementById("radioMount"), {
-        onReady: (f) => { f.mute(); f.play(); }, // muted play forces playlist delivery
+        onReady: (f) => { f.mute(); f.play(); },
         onInfo: (f, info) => {
           if (Array.isArray(info.playlist) && info.playlist.length) {
             f.pause();
@@ -210,6 +249,14 @@ function loadRadio(seedId) {
     engine.radio.mute();
     setTimeout(() => engine._radioResolve && engine._radioResolve(engine.radio.info.playlist), 7000);
   });
+}
+
+/* Build the "similar tracks" list: fetch-scrape first, player API as fallback. */
+async function loadRadio(seedId) {
+  const fetched = await fetchMixList(seedId);
+  if (fetched.length > 1) { log("Mixを取得: " + fetched.length + " 曲 (fetch)"); return fetched; }
+  log("fetchでMix取得できず → プレイヤーAPIを試行");
+  return loadRadioViaPlayer(seedId);
 }
 
 async function reseed(fromId) {
@@ -314,6 +361,7 @@ function onDeckInfo(frame, info) {
   }
   if (frame !== engine.active || engine.crossfading || !engine.running) { refreshNowPlaying(); return; }
   const dur = info.duration || 0, cur = info.currentTime || 0;
+  if (cur > 0.8) engine.errStreak = 0; // a track is actually playing
   refreshNowPlaying();
   if (engine.nativeRadio) return; // no manual crossfade in native-radio fallback
   if (engine.autoMix && dur > 0) {
@@ -332,8 +380,17 @@ function onDeckState(frame, state) {
   }
 }
 function onDeckError(frame, code) {
+  // 101/150/153 = the video owner disabled embedded playback.
   log("再生エラー(code " + code + ") スキップします");
-  if (frame === engine.active && engine.running) goNextNow(1);
+  if (frame !== engine.active || !engine.running || engine.crossfading) return;
+  engine.errStreak++;
+  if (engine.errStreak > 8) {
+    log("埋め込み再生できない動画が続いたため停止しました。別の曲を種にお試しください。");
+    pause();
+    engine.errStreak = 0;
+    return;
+  }
+  goNextNow(1);
 }
 
 /* ---------------- UI refresh ---------------- */
@@ -609,5 +666,5 @@ if (typeof document !== "undefined" && document.getElementById) {
 }
 /* Exported for unit tests (no-op in the browser). */
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseVideoId, fmtTime, engine, peekNextId, consumeNext };
+  module.exports = { parseVideoId, fmtTime, engine, peekNextId, consumeNext, extractMixIds };
 }
